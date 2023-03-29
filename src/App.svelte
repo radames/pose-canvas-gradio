@@ -1,14 +1,30 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import {
-    Pose,
-    POSE_CONNECTIONS,
-    POSE_LANDMARKS,
-    POSE_LANDMARKS_LEFT,
-    POSE_LANDMARKS_RIGHT,
-  } from "@mediapipe/pose";
+  import { Pose as _Pose } from "@mediapipe/pose";
+  import { POSE_CONNECTIONS as _POSE_CONNECTIONS } from "@mediapipe/pose";
+  import { POSE_LANDMARKS as _POSE_LANDMARKS } from "@mediapipe/pose";
+  import { POSE_LANDMARKS_LEFT as _POSE_LANDMARKS_LEFT } from "@mediapipe/pose";
+  import { POSE_LANDMARKS_RIGHT as _POSE_LANDMARKS_RIGHT } from "@mediapipe/pose";
+  import { Camera as _Camera } from "@mediapipe/camera_utils";
 
-  import { Camera } from "@mediapipe/camera_utils";
+  // hack to fix mediapipe import
+  const Pose = _Pose || window.Pose;
+  const Camera = _Camera || window.Camera;
+  const POSE_CONNECTIONS = _POSE_CONNECTIONS || window.POSE_CONNECTIONS;
+  const POSE_LANDMARKS = _POSE_LANDMARKS || window.POSE_LANDMARKS;
+  const POSE_LANDMARKS_LEFT =
+    _POSE_LANDMARKS_LEFT || window.POSE_LANDMARKS_LEFT;
+  const POSE_LANDMARKS_RIGHT =
+    _POSE_LANDMARKS_RIGHT || window.POSE_LANDMARKS_RIGHT;
+
+  const emojiTimer = {
+    0: "0️⃣",
+    1: "1️⃣",
+    2: "2️⃣",
+    3: "3️⃣",
+    4: "4️⃣",
+    5: "5️⃣",
+  };
 
   let videoElement: HTMLVideoElement;
   let canvasElement: HTMLCanvasElement;
@@ -20,7 +36,8 @@
   let baseRootEl: HTMLDivElement;
   let voiceRecognition: SpeechRecognition | null = null;
   let enabledVoiceSnap = false;
-  console.log(POSE_LANDMARKS);
+  let timerInterval: ReturnType<typeof setInterval> | null = null;
+  let timerSeconds = 0;
 
   const limbSeq = [
     {
@@ -308,18 +325,31 @@
     // node
     ctx.font = "12px serif";
     for (const connection of limbSeq) {
-      const p = landmarks[connection.start];
+      const p = landmarks[connection.end];
       if (p == null) continue;
       const [x, y] = [p.x * width, p.y * height];
       ctx.beginPath();
       ctx.arc(x, y, stickWidth, 0, 2 * Math.PI);
       ctx.fillStyle = `rgb(${connection.color.join(",")})`;
       ctx.fill();
-      ctx.fillStyle = "rgb(255,255,255)";
-      ctx.fillText(connection.end, x - 3, y + 4);
+      // ctx.fillStyle = "rgb(255,255,255)";
+      // ctx.fillText(connection.end, x - 3, y + 4);
     }
   }
-
+  function triggerTimer(seconds = 5) {
+    clearInterval(timerInterval);
+    timerInterval = null;
+    timerSeconds = seconds;
+    timerInterval = setInterval(() => {
+      timerSeconds--;
+      if (timerSeconds <= 0) {
+        clearInterval(timerInterval);
+        timerInterval = null;
+        timerSeconds = 0;
+        snapImage();
+      }
+    }, 1000);
+  }
   function toggleVoiceSnap() {
     if (enabledVoiceSnap && voiceRecognition) {
       voiceRecognition.stop();
@@ -348,7 +378,6 @@
             .toLowerCase();
           console.log(transcript);
           if (event.results[i].isFinal && transcript.includes("snap")) {
-            console.log("Voice snap");
             snapImage();
           }
         }
@@ -376,9 +405,18 @@
   <div class="flex absolute bottom-1 left-1 items-end">
     <div class="flex flex-col gap-2">
       <button on:click={snapImage} class="capture-btn">Snap</button>
-      <button on:click={toggleVoiceSnap} class="capture-btn"
-        >{enabledVoiceSnap ? "🎤" : "🎤❌"}</button
-      >
+      <div class="flex gap-2">
+        <button on:click={toggleVoiceSnap} class="capture-btn"
+          >{enabledVoiceSnap ? "🎤" : "🎤❌"}</button
+        >
+        <button
+          disabled={timerSeconds > 0}
+          on:click={() => triggerTimer()}
+          class="capture-btn"
+        >
+          {emojiTimer[timerSeconds]}🕒
+        </button>
+      </div>
     </div>
     <canvas
       bind:this={snapCanvasElement}
@@ -388,6 +426,7 @@
     />
   </div>
 </div>
+""
 
 <style lang="postcss" scoped>
   canvas {
